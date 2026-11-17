@@ -1,0 +1,25 @@
+{
+ "name": "deepseek-pclink",
+ "version": "1.0.0",
+ "description": "A local AI-to-PC bridge for DeepSeek",
+ "main": "main.js",
+ "author": "Your Name",
+ "scripts": {
+ "start": "electron .",
+ "build": "electron-builder"
+ },
+ "devDependencies": {
+ "electron": "^29.0.0",
+ "electron-builder": "^24.13.3"
+ },
+ "build": {
+ "appId": "com.yourname.deepseekpclink",
+ "win": {
+ "target": "nsis"
+ },
+ "nsis": {
+ "oneClick": false,
+ "allowToChangeInstallationDirectory": true
+ }
+ }
+}

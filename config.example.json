@@ -1,0 +1,12 @@
+{
+  "autoAllow": false,
+  "showSkipped": false,
+  "autoReturnToChat": false,
+  "autoAllowPhone": false,
+  "autoRefresh": true,
+  "allowlist": ["echo", "dir", "type", "whoami", "ver", "hostname", "cd", "vol", "where", "ffmpeg"],
+  "trustedFolders": ["C:\\Users\\YOUR_USERNAME\\Documents\\Deepseek_pclink"],
+  "phoneBridgeDir": "C:\\Users\\YOUR_USERNAME\\Documents\\phone-bridge",
+  "telegramToken": "",
+  "telegramChatId": ""
+}

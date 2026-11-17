@@ -1,0 +1,7 @@
+does:
+fs.writeFileSync(targetPath, content.replace(/\
+/g, '
+'), 'utf8');
+So I can send it as one long line with 
+ literals!
+But earlier when I sent it, I did send it as a single line in my output. (Look at the previous turn:

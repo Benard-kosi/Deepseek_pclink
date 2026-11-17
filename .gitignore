@@ -1,0 +1,34 @@
+# --- Node / Electron ---
+node_modules/
+dist/
+build/
+
+# --- Python venv ---
+venv_phone/
+.venv/
+__pycache__/
+*.pyc
+
+# --- Local config (local paths + Telegram bot token — NEVER commit) ---
+config.json
+
+# --- Dev leftovers / backups ---
+*.orig
+*.bak
+*.bak[0-9]
+preload.retry.js
+preload.retry.broken.js
+main.hardened.js
+preload.hardened.js
+
+# --- Scratch / test artifacts ---
+ui_dump.xml
+exe_test.txt
+*.mp4
+test_folder/
+electron_test/
+logs/
+
+# --- OS ---
+.DS_Store
+Thumbs.db

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PC Link Settings</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1e1e1e; color: #fff; padding: 20px; }
+    h2 { color: #4daafc; margin-top: 0; }
+    h3 { color: #ddd; font-size: 14px; border-bottom: 1px solid #444; padding-bottom: 5px; margin-top: 25px;}
+    label { display: flex; align-items: center; margin: 10px 0; font-size: 14px; cursor: pointer; }
+    input[type="checkbox"] { margin-right: 10px; transform: scale(1.2); }
+    textarea { width: 100%; height: 60px; background: #2d2d2d; color: #fff; border: 1px solid #444; padding: 10px; border-radius: 4px; font-family: monospace; box-sizing: border-box; }
+    button { background: #4daafc; color: #000; border: none; padding: 8px 15px; font-weight: bold; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #3b8bce; }
+    button.remove-btn { background: #ff5555; padding: 4px 8px; font-size: 12px; margin-left: 10px; }
+    button.remove-btn:hover { background: #cc0000; }
+    button.copy-btn { background: #27ae60; color: #fff; margin-top: 5px; }
+    button.copy-btn:hover { background: #219653; }
+    .folder-list { max-height: 150px; overflow-y: auto; background: #2d2d2d; padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 12px; }
+    .folder-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px solid #444; }
+    #status { color: #4caf50; display: none; font-weight: bold; margin-top: 15px; }
+    .reminder-text { height: 75px !important; resize: none; cursor: text; }
+  </style>
+</head>
+<body>
+  <h2>Settings</h2>
+  
+  <label><input type="checkbox" id="autoAllow"> Auto-Allow Commands (Skips the popup!)</label>
+  <label><input type="checkbox" id="autoAllowPhone"> Hands-free PHONE mode (auto-allow !PHONE only — PC still prompts)</label>
+  <label><input type="checkbox" id="autoReturnToChat"> Auto-send results back to chat (no manual Enter)</label>
+  <label><input type="checkbox" id="autoRefresh"> Auto-refresh page to catch mobile messages (turn OFF when typing at the PC)</label>
+  <label><input type="checkbox" id="showSkipped"> Show "Skipped" replies in chat</label>
+
+  <h3>Allowed Shell Commands</h3>
+  <textarea id="allowlist"></textarea>
+  <button onclick="saveSettings()" style="margin-top: 10px;">Save Settings</button>
+  <p id="status">Saved successfully!</p>
+
+  <h3>Trusted Folders</h3>
+  <div class="folder-list" id="folderList"></div>
+  <button onclick="addFolder()">+ Add Folder</button>
+
+  <h3>New Chat Reminder</h3>
+  <p style="font-size: 12px; color: #aaa; margin-top: 0;">Copy this and paste it into a new chat to wake the AI up:</p>
+  <textarea id="reminderText" readonly class="reminder-text">Please type !ENV on a new line to see your environment and connect to my PC.</textarea>
+  <button class="copy-btn" id="copyBtn" onclick="copyReminder()">Copy Reminder</button>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    let currentFolders = [];
+
+    ipcRenderer.on('load-settings', (event, config) => {
+      document.getElementById('autoAllow').checked = config.autoAllow;
+      document.getElementById('showSkipped').checked = config.showSkipped;
+      document.getElementById('autoAllowPhone').checked = !!config.autoAllowPhone;
+      document.getElementById('autoReturnToChat').checked = !!config.autoReturnToChat;
+      document.getElementById('autoRefresh').checked = (config.autoRefresh !== false);
+      document.getElementById('allowlist').value = config.allowlist.join(', ');
+      renderFolders(config.trustedFolders || []);
+    });
+
+    ipcRenderer.on('update-folders', (event, folders) => {
+      renderFolders(folders);
+    });
+
+    function renderFolders(folders) {
+      currentFolders = folders;
+      const list = document.getElementById('folderList');
+      list.innerHTML = '';
+      folders.forEach(f => {
+        const div = document.createElement('div');
+        div.className = 'folder-item';
+        div.innerHTML = '<span>' + f + '</span>';
+        const btn = document.createElement('button');
+        btn.className = 'remove-btn';
+        btn.innerText = 'X';
+        btn.onclick = () => { ipcRenderer.send('remove-folder', f); };
+        div.appendChild(btn);
+        list.appendChild(div);
+      });
+    }
+
+    function addFolder() {
+      ipcRenderer.send('add-folder');
+    }
+
+    function copyReminder() {
+      const text = document.getElementById('reminderText').value;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.innerText = "Copied!";
+        setTimeout(() => { btn.innerText = "Copy Reminder"; }, 2000);
+      });
+    }
+
+    function saveSettings() {
+      const config = { 
+        autoAllow: document.getElementById('autoAllow').checked, 
+        showSkipped: document.getElementById('showSkipped').checked,
+        autoAllowPhone: document.getElementById('autoAllowPhone').checked,
+        autoReturnToChat: document.getElementById('autoReturnToChat').checked,
+        autoRefresh: document.getElementById('autoRefresh').checked,
+        allowlist: document.getElementById('allowlist').value.split(',').map(s => s.trim()).filter(Boolean),
+        trustedFolders: currentFolders
+      };
+      ipcRenderer.send('save-settings', config);
+      document.getElementById('status').style.display = 'block';
+      setTimeout(() => { document.getElementById('status').style.display = 'none'; }, 2000);
+    }
+  </script>
+</body>
+</html>
