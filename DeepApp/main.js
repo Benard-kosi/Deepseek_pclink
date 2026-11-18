@@ -81,6 +81,24 @@ function tokenize(cmd) {
   return out;
 }
 function looksLikePath(a) { return a.includes("\\") || /^[A-Za-z]:/.test(a) || a.startsWith("..") || a.startsWith("/"); }
+// Resolve a !FILE target. Absolute paths pass through. A relative target is tried under BASE_DIR first;
+// if it doesn't exist there but its first segment matches a Trusted Folder's name, it resolves to that
+// folder's real location (so an added folder is reachable by name). Confinement is still enforced after.
+function resolveTarget(target) {
+  const t = String(target || '');
+  if (path.isAbsolute(t)) return t;
+  const underBase = path.resolve(BASE_DIR, t);
+  try { if (fs.existsSync(underBase)) return underBase; } catch (e) {}
+  const parts = t.replace(/^[\\/]+/, '').split(/[\\/]/);
+  const seg = (parts[0] || '').toLowerCase();
+  for (const root of (config.trustedFolders || [])) {
+    if (path.basename(root).toLowerCase() === seg) {
+      const rest = parts.slice(1).join(path.sep);
+      return rest ? path.join(root, rest) : root;
+    }
+  }
+  return underBase;
+}
 
 // ---------- window / menu / settings (unchanged from DeepApp) ----------
 function createWindow() {
@@ -131,7 +149,7 @@ ipcMain.on('remove-folder', (event, folderToRemove) => {
   settingsWindow.webContents.send('update-folders', config.trustedFolders);
 });
 ipcMain.handle('get-env', async () => ({ allowlist: config.allowlist, trustedFolders: config.trustedFolders, autoAllow: config.autoAllow }));
-ipcMain.handle('get-config', () => ({ autoReturnToChat: !!config.autoReturnToChat, autoAllow: !!config.autoAllow, autoRefresh: config.autoRefresh !== false, autoRefreshSec: Number(config.autoRefreshSec || 20) }));
+ipcMain.handle('get-config', () => ({ autoReturnToChat: !!config.autoReturnToChat, autoAllow: !!config.autoAllow, autoRefresh: config.autoRefresh !== false, autoRefreshSec: Number(config.autoRefreshSec || 20), sendCooldownSec: Number(config.sendCooldownSec || 8) }));
 
 // ---------- !PHONE: forward to the existing phone-bridge (same broker Claude uses) ----------
 const PHONE_BLOCK = new Set(["pc", "restart", "startup", "tcpip", "net"]);
@@ -233,7 +251,7 @@ ipcMain.handle('file-op', async (event, action, target, content, reason) => {
   if (action === 'read' && target === 'clipboard') return clipboard.readText() || "(clipboard empty)";
   if (action === 'write' && target === 'clipboard') { clipboard.writeText(content); return "Copied to clipboard"; }
 
-  const abs = path.isAbsolute(target) ? target : path.resolve(BASE_DIR, String(target || ""));
+  const abs = resolveTarget(target);
   const chk = checkInsideTrusted(abs);
   if (!chk.ok) return "Access denied: target is " + chk.reason + ".";
   const targetPath = chk.resolved;

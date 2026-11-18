@@ -22,20 +22,34 @@ window.addEventListener('DOMContentLoaded', async () => {
   try { lastBatch = localStorage.getItem(LAST_KEY) || null; } catch (e) {}
   let busy = false;
   const retried = new Set();
+  function lastCmdLine() {
+    if (!lastBatch) return '';
+    const m = String(lastBatch).split('\n').map(x => x.trim()).find(x => /^!(EXEC|PHONE|FILE)\b/i.test(x));
+    return m ? (m.length > 48 ? m.slice(0, 48) + '…' : m) : '';
+  }
+  function updateLast() {
+    const el = document.getElementById('pclink-last');
+    if (el) { const c = lastCmdLine(); el.textContent = c ? ('↻ ' + c) : ''; el.style.display = c ? 'block' : 'none'; el.title = lastBatch || ''; }
+  }
   function badge() {
     let b = document.getElementById('pclink-badge');
     if (!b) {
       b = document.createElement('div');
       b.id = 'pclink-badge';
-      b.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:2147483647;font:12px/1.3 Segoe UI,Arial,sans-serif;background:#1e1e1e;color:#fff;border:1px solid #444;border-radius:8px;padding:7px 10px;box-shadow:0 2px 10px rgba(0,0,0,.45);display:flex;align-items:center;gap:8px;';
+      b.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:2147483647;font:12px/1.3 Segoe UI,Arial,sans-serif;background:#1e1e1e;color:#fff;border:1px solid #444;border-radius:8px;padding:7px 10px;box-shadow:0 2px 10px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:5px;max-width:330px;';
+      const row = document.createElement('div'); row.style.cssText = 'display:flex;align-items:center;gap:8px;';
       const dot = document.createElement('span'); dot.id = 'pclink-dot';
       dot.style.cssText = 'width:9px;height:9px;border-radius:50%;background:#777;display:inline-block;flex:0 0 auto;';
       const txt = document.createElement('span'); txt.id = 'pclink-txt'; txt.textContent = 'PC Link: idle';
       const btn = document.createElement('button'); btn.id = 'pclink-rerun'; btn.textContent = 'Re-run last';
-      btn.style.cssText = 'background:#4daafc;border:none;border-radius:4px;color:#000;font-weight:bold;cursor:pointer;padding:3px 7px;';
+      btn.style.cssText = 'background:#4daafc;border:none;border-radius:4px;color:#000;font-weight:bold;cursor:pointer;padding:3px 7px;margin-left:auto;flex:0 0 auto;';
       btn.onclick = () => { if (lastBatch) { try { retried.delete(hash(lastBatch)); } catch (e) {} setStatus('re-running…', '#ffcc00'); processText(lastBatch); } };
-      b.appendChild(dot); b.appendChild(txt); b.appendChild(btn);
+      row.appendChild(dot); row.appendChild(txt); row.appendChild(btn);
+      const last = document.createElement('div'); last.id = 'pclink-last';
+      last.style.cssText = 'font-size:11px;color:#9ad;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:310px;display:none;';
+      b.appendChild(row); b.appendChild(last);
       (document.body || document.documentElement).appendChild(b);
+      updateLast();
     }
     return b;
   }
@@ -65,15 +79,46 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Try to post `text` into the chat and confirm it submitted (textarea clears). Returns true if sent.
+  let lastSendTime = 0;
+  function showCountdown(secs) {
+    const b = badge();
+    let cd = document.getElementById('pclink-cd');
+    if (!cd) {
+      cd = document.createElement('div');
+      cd.id = 'pclink-cd';
+      cd.style.cssText = 'font-size:11px;font-weight:bold;color:#ffcc00;';
+      b.insertBefore(cd, b.firstChild);
+    }
+    cd.textContent = '⏳ next message in ' + secs + 's';
+    cd.style.display = 'block';
+  }
+  function hideCountdown() { const cd = document.getElementById('pclink-cd'); if (cd) cd.style.display = 'none'; }
+  async function cooldownBefore() {
+    let c = {};
+    try { c = await cfg(); } catch (e) {}
+    const cdMs = ((c && c.sendCooldownSec) ? Number(c.sendCooldownSec) : 8) * 1000;
+    let remain = cdMs - (Date.now() - lastSendTime);
+    while (remain > 0) {
+      showCountdown(Math.ceil(remain / 1000));
+      await sleep(Math.min(500, remain));
+      remain = cdMs - (Date.now() - lastSendTime);
+    }
+    hideCountdown();
+  }
   async function trySendOnce(text) {
     const ta = document.querySelector('textarea');
     if (!ta) return false;
     setTA(ta, text);
     ta.focus();
-    await sleep(400);
-    ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+    await sleep(300);
+    await cooldownBefore();                       // rate-limit guard (visible countdown)
+    const ta3 = document.querySelector('textarea'); if (!ta3) return false;
+    setTA(ta3, text);
+    ta3.focus();
+    ta3.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
     const btn = findSendButton();
     if (btn) { try { btn.click(); } catch (e) {} }
+    lastSendTime = Date.now();
     await sleep(1300);
     const ta2 = document.querySelector('textarea');
     return !ta2 || !ta2.value.trim();   // empty box => it was submitted
@@ -148,7 +193,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (foundCommand) {
-      lastBatch = text; try { localStorage.setItem(LAST_KEY, text); } catch (e) {}
+      lastBatch = text; try { localStorage.setItem(LAST_KEY, text); } catch (e) {} updateLast();
       const k = hash(text);
       const failedToRun = results.some(r => /No answer from phone-bridge|is phone_bridge\.bat running|Error writing to phone-bridge inbox|phone-bridge not found/i.test(String(r)));
       if (results.length > 0 && !failedToRun) {
@@ -187,6 +232,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  const processedEl = new WeakSet();   // message elements already executed this session
+  const preAtLoad = new WeakSet();     // messages already on the page right after load (history)
+  const graceUntil = Date.now() + 3000;
   function scan() {
     document.querySelectorAll(SELECTOR).forEach(el => {
       if (el.closest('details')) return;
@@ -194,13 +242,15 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (el.closest('[class*="reason"]')) return;
       const t = (el.innerText || '').trim();
       if (!t || t.startsWith('Thought for') || t.startsWith('Thinking')) return;
-      const k = hash(t);
-      if (ran.has(k)) return;
+      if (processedEl.has(el)) return;                     // same element, already handled
+      const k = hash(t.replace(/\s+/g, ' '));             // normalize whitespace -> stable key across reloads
+      if (Date.now() < graceUntil) preAtLoad.add(el);      // snapshot history briefly after load
+      if (preAtLoad.has(el) && ran.has(k)) return;         // old history already run -> skip (don't re-run on refresh)
       const prev = pendingScan.get(el);
       if (prev && prev.text === t) return;
       if (prev) clearTimeout(prev.timer);
       const timer = setTimeout(() => {
-        if (el.isConnected && !ran.has(k)) { markRan(k); processText(t); }
+        if (el.isConnected && !processedEl.has(el)) { processedEl.add(el); markRan(k); processText(t); }
       }, 1200);
       pendingScan.set(el, { text: t, timer });
     });
